@@ -63,8 +63,9 @@ def send_welcome(message):
         "- 10 text queries every hour.\n\n"
         "🔗 Make sure to join The Alpha Botz Channel to start using the bot."
     )
-    keyboard = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
-    keyboard.add(telebot.types.KeyboardButton('Change Model'))
+    keyboard = telebot.types.InlineKeyboardMarkup()
+    keyboard.add(telebot.types.InlineKeyboardButton('Join The Alpha Botz Channel', url='https://t.me/thealphabotz'))
+    keyboard.add(telebot.types.InlineKeyboardButton('Developer', url='https://t.me/adarsh2626'))
     bot.send_message(message.chat.id, start_message, parse_mode='Markdown', reply_markup=keyboard)
 
 # Image generation command handler
@@ -97,7 +98,7 @@ def generate_image(message):
 
     # Send ⚡ emoji
     flash_message = bot.send_message(message.chat.id, "⚡")
-    time.sleep(2)
+    time.sleep(3.5)
     bot.delete_message(message.chat.id, flash_message.message_id)
 
     data = {'query': prompt, 'agentMode': True}
