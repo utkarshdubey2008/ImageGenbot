@@ -57,7 +57,7 @@ def send_welcome(message):
         "    - 🌟 *Mixtral*\n"
         "    - 💎 *Gemma*\n"
         "    - 🦙 *Llama*\n"
-        "🔄 Switch models anytime with `/change`.\n\n"
+        "🔄 Switch models anytime with `/change <model>`.\n\n"
         "⚠️ *Limits*:\n"
         "- 3 image generations every 3 hours.\n"
         "- 10 text queries every hour.\n\n"
@@ -172,28 +172,42 @@ def handle_query(message):
     bot.reply_to(message, response_text)
 
 # Model change command handler
-@bot.message_handler(func=lambda message: message.text == 'Change Model')
+@bot.message_handler(commands=['change'])
 def change_model(message):
-    model_message = (
-        "🤖 *Select your preferred model:*\n"
-        "1. 🌟 Mixtral\n"
-        "2. 💎 Gemma\n"
-        "3. 🦙 Llama\n"
-        "Please reply with the model name (e.g., Mixtral)."
-    )
-    bot.send_message(message.chat.id, model_message, parse_mode='Markdown')
-
-@bot.message_handler(func=lambda message: message.text in ['Mixtral', 'Gemma', 'Llama'])
-def set_model(message):
     user_id = message.from_user.id
-    model_names = {
-        'Mixtral': 'mixtral-8x7b-32768',
-        'Gemma': 'gemma2-9b-it',
-        'Llama': 'llama3-70b-8192'
+    command_parts = message.text.split()
+
+    if len(command_parts) == 1:
+        # No model specified, provide available options
+        options_message = (
+            "🤖 *Available models:*\n"
+            "1. 🌟 Mixtral\n"
+            "2. 💎 Gemma\n"
+            "3. 🦙 Llama\n"
+            "🔄 Use `/change <model>` to switch models.\n"
+            "Example: `/change gemma`"
+        )
+        bot.reply_to(message, options_message, parse_mode='Markdown')
+        return
+
+    if len(command_parts) != 2:
+        bot.reply_to(message, "⚠️ Usage: `/change <model>`\nExample: `/change gemma`", parse_mode='Markdown')
+        return
+
+    model_name = command_parts[1].lower()
+    model_map = {
+        'mixtral': 'mixtral-8x7b-32768',
+        'gemma': 'gemma2-9b-it',
+        'llama': 'llama3-70b-8192'
     }
-    selected_model = model_names.get(message.text)
+
+    if model_name not in model_map:
+        bot.reply_to(message, "⚠️ Invalid model name. Please choose from `mixtral`, `gemma`, or `llama`.", parse_mode='Markdown')
+        return
+
+    selected_model = model_map[model_name]
     user_model[user_id] = selected_model
-    bot.reply_to(message, f'✅ Model changed to: {message.text}')
+    bot.reply_to(message, f'✅ Model changed to: {model_name.capitalize()}', parse_mode='Markdown')
 
 # Start the Flask app in a separate thread
 flask_thread = Thread(target=run_flask_app)
