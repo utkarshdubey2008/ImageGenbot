@@ -2,3 +2,5 @@ telebot
 requests
 flask
 groq
+pymongo
+dnspython
