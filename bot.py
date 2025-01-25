@@ -4,12 +4,24 @@ from flask import Flask, request
 from threading import Thread
 from groq import Groq
 import time
+import random
+import string
+import pymongo
+from pymongo import MongoClient
 
 # Bot Configuration
 API_TOKEN = '8107353617:AAEvH1iADJveysXU9QUobi6GQ9zz_rdJA4k'
 GROQ_API_KEY = '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'
 CHANNEL_ID = '@thealphabotz'
+ADMIN_ID = 123456789  # Replace with the actual admin user ID
 bot = telebot.TeleBot(API_TOKEN)
+
+# MongoDB Configuration
+MONGO_URI = 'mongodb+srv://ank41785:TjezIhHRkw3vJDBk@cluster0.nldfp.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0'
+client = MongoClient(MONGO_URI)
+db = client['bot_database']
+users_collection = db['users']
+codes_collection = db['codes']
 
 # Rate limiting data structures
 image_rate_limit = {}
@@ -46,6 +58,15 @@ def is_subscribed(user_id):
     member = bot.get_chat_member(CHANNEL_ID, user_id)
     return member.status in ['member', 'administrator', 'creator']
 
+# Helper function to check if a user is admin
+def is_admin(user_id):
+    return user_id == ADMIN_ID
+
+# Helper function to generate random codes
+def generate_random_code(length=8):
+    letters_and_digits = string.ascii_uppercase + string.digits
+    return ''.join(random.choice(letters_and_digits) for _ in range(length))
+
 # Start and help command handlers
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
@@ -54,14 +75,13 @@ def send_welcome(message):
         "Here’s what I can do for you:\n"
         "🔹 *Image Generation*: Use `/gen <prompt>` to create stunning images.\n"
         "🔹 *Text-Based Queries*: Chat with me using AI models like:\n"
-        "    - 🌟 *Mixtral*\n"
-        "    - 💎 *Gemma*\n"
-        "    - 🦙 *Llama*\n"
-        "🔄 Switch models anytime with `/change <model>`.\n\n"
+        "    - 💎 *Gemma*\n\n"
         "⚠️ *Limits*:\n"
-        "- 3 image generations every 3 hours.\n"
-        "- 10 text queries every hour.\n\n"
-        "🔗 Make sure to join The Alpha Botz Channel to start using the bot."
+        "- 3 image generations every hour (Free users).\n"
+        "- 10 text queries every hour (Free users).\n"
+        "- 5 image generations every hour (Premium users).\n"
+        "- 25 text queries every hour (Premium users).\n\n"
+        "🔗 Make sure to join [The Alpha Botz Channel](https://t.me/thealphabotz) to start using the bot."
     )
     keyboard = telebot.types.InlineKeyboardMarkup()
     keyboard.add(telebot.types.InlineKeyboardButton('Join The Alpha Botz Channel', url='https://t.me/thealphabotz'))
@@ -84,17 +104,30 @@ def generate_image(message):
         bot.reply_to(message, "⚠️ Please provide a prompt for image generation. Example: `/gen a beautiful sunset`")
         return
 
-    # Rate limit check
+    # Retrieve user data
+    user_data = users_collection.find_one({'user_id': user_id})
+    if not user_data:
+        user_data = {'user_id': user_id, 'is_premium': False, 'image_gen_count': 0, 'text_query_count': 0}
+        users_collection.insert_one(user_data)
+
+    # Check rate limits based on user type
     current_time = time.time()
-    if user_id in image_rate_limit and len(image_rate_limit[user_id]) >= 3:
-        if current_time - image_rate_limit[user_id][0] < 10800: # 3 hours in seconds
-            bot.reply_to(message, "⚠️ You’ve reached the image generation limit (3 images/3 hours). Please try again later.")
-            return
-        else:
-            image_rate_limit[user_id].pop(0)
-    if user_id not in image_rate_limit:
-        image_rate_limit[user_id] = []
-    image_rate_limit[user_id].append(current_time)
+    is_premium = user_data['is_premium']
+    max_images_per_hour = 5 if is_premium else 3
+    max_images_per_day = 25 if is_premium else 10
+
+    # Check hourly image generation limit
+    if user_data['image_gen_count'] >= max_images_per_hour:
+        bot.reply_to(message, f"⚠️ You’ve reached the image generation limit ({max_images_per_hour} images/hour). Please try again later.")
+        return
+
+    # Check daily image generation limit
+    if user_data['image_gen_count'] >= max_images_per_day:
+        bot.reply_to(message, f"⚠️ You’ve reached the daily image generation limit ({max_images_per_day} images/day). Please try again tomorrow.")
+        return
+
+    # Increment image generation count
+    users_collection.update_one({'user_id': user_id}, {'$inc': {'image_gen_count': 1}})
 
     # Send ⚡ emoji
     flash_message = bot.send_message(message.chat.id, "⚡")
@@ -120,94 +153,131 @@ def handle_query(message):
         bot.reply_to(message, "🚫 You must join The Alpha Botz to use this bot. ✅ Once you've joined, click 'Start' below.", parse_mode='Markdown', reply_markup=keyboard)
         return
 
-    # Rate limit check
     user_id = message.from_user.id
-    current_time = time.time()
-    if user_id in query_rate_limit and len(query_rate_limit[user_id]) >= 10:
-        if current_time - query_rate_limit[user_id][0] < 3600: # 1 hour in seconds
-            bot.reply_to(message, "⚠️ You’ve exceeded the query limit (10 queries/hour). Please try again after some time.")
-            return
-        else:
-            query_rate_limit[user_id].pop(0)
-    if user_id not in query_rate_limit:
-        query_rate_limit[user_id] = []
-    query_rate_limit[user_id].append(current_time)
-
     prompt = message.text
-    model = user_model.get(user_id, 'mixtral-8x7b-32768')
-    if model == 'llama3-70b-8192':
-        completion = client.chat.completions.create(
-            model="llama3-70b-8192",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=1,
-            max_completion_tokens=1024,
-            top_p=1,
-            stream=True,
-            stop=None,
-        )
-    elif model == 'gemma2-9b-it':
-        completion = client.chat.completions.create(
-            model="gemma2-9b-it",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=1,
-            max_completion_tokens=1024,
-            top_p=1,
-            stream=True,
-            stop=None,
-        )
-    else:
-        completion = client.chat.completions.create(
-            model="mixtral-8x7b-32768",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=1,
-            max_completion_tokens=1024,
-            top_p=1,
-            stream=True,
-            stop=None,
-        )
+
+    # Retrieve user data
+    user_data = users_collection.find_one({'user_id': user_id})
+    if not user_data:
+        user_data = {'user_id': user_id, 'is_premium': False, 'image_gen_count': 0, 'text_query_count': 0}
+        users_collection.insert_one(user_data)
+
+    # Check rate limits based on user type
+    current_time = time.time()
+    is_premium = user_data['is_premium']
+    max_queries_per_hour = 25 if is_premium else 10
+
+    # Check hourly text query limit
+    if user_data['text_query_count'] >= max_queries_per_hour:
+        bot.reply_to(message, f"⚠️ You’ve exceeded the query limit ({max_queries_per_hour} queries/hour). Please try again after some time.")
+        return
+
+    # Increment text query count
+    users_collection.update_one({'user_id': user_id}, {'$inc': {'text_query_count': 1}})
+
+    completion = client.chat.completions.create(
+        model="gemma2-9b-it",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=1,
+        max_completion_tokens=1024,
+        top_p=1,
+        stream=True,
+        stop=None,
+    )
 
     response_text = ""
     for chunk in completion:
         response_text += chunk.choices[0].delta.content or ""
     bot.reply_to(message, response_text)
 
-# Model change command handler
-@bot.message_handler(commands=['change'])
-def change_model(message):
+# Stats command handler for admins
+@bot.message_handler(commands=['stats'])
+def show_stats(message):
+    user_id = message.from_user.id
+    if not is_admin(user_id):
+        bot.reply_to(message, "🚫 You do not have permission to use this command.")
+        return
+
+    total_users = users_collection.count_documents({})
+    total_image_gen_today = users_collection.aggregate([
+        {"$group": {"_id": None, "total": {"$sum": "$image_gen_count"}}}
+    ]).next().get('total', 0)
+    total_text_queries_today = users_collection.aggregate([
+        {"$group": {"_id": None, "total": {"$sum": "$text_query_count"}}}
+    ]).next().get('total', 0)
+
+    stats_message = (
+        f"📊 *Bot Statistics:*\n"
+        f"👥 Total Users: {total_users}\n"
+        f"🖼️ Images Generated Today: {total_image_gen_today}\n"
+        f"💬 Text Queries Today: {total_text_queries_today}"
+    )
+    bot.reply_to(message, stats_message, parse_mode='Markdown')
+
+# Broadcast command handler for admins
+@bot.message_handler(commands=['broadcast'])
+def broadcast_message(message):
+    user_id = message.from_user.id
+    if not is_admin(user_id):
+        bot.reply_to(message, "🚫 You do not have permission to use this command.")
+        return
+
+    if not message.reply_to_message:
+        bot.reply_to(message, "⚠️ Please reply to a message with /broadcast to broadcast it.")
+        return
+
+    broadcast_content = message.reply_to_message
+    for user in users_collection.find():
+        try:
+            if broadcast_content.text:
+                bot.send_message(user['user_id'], broadcast_content.text, parse_mode='Markdown')
+            elif broadcast_content.photo:
+                bot.send_photo(user['user_id'], broadcast_content.photo[-1].file_id, caption=broadcast_content.caption, parse_mode='Markdown')
+            elif broadcast_content.video:
+                bot.send_video(user['user_id'], broadcast_content.video.file_id, caption=broadcast_content.caption, parse_mode='Markdown')
+            elif broadcast_content.document:
+                bot.send_document(user['user_id'], broadcast_content.document.file_id, caption=broadcast_content.caption, parse_mode='Markdown')
+        except:
+            continue
+
+# Generate premium codes for admins
+@bot.message_handler(commands=['generate_codes'])
+def generate_premium_codes(message):
+    user_id = message.from_user.id
+    if not is_admin(user_id):
+        bot.reply_to(message, "🚫 You do not have permission to use this command.")
+        return
+
+    codes = [generate_random_code() for _ in range(5)]
+    codes_collection.insert_many([{'code': code, 'is_redeemed': False} for code in codes])
+
+    codes_message = "🔑 *Generated Premium Codes:*\n" + "\n".join(codes)
+    bot.reply_to(message, codes_message, parse_mode='Markdown')
+
+# Redeem premium codes
+@bot.message_handler(commands=['redeem'])
+def redeem_code(message):
     user_id = message.from_user.id
     command_parts = message.text.split()
 
-    if len(command_parts) == 1:
-        # No model specified, provide available options
-        options_message = (
-            "🤖 *Available models:*\n"
-            "1. 🌟 Mixtral\n"
-            "2. 💎 Gemma\n"
-            "3. 🦙 Llama\n"
-            "🔄 Use `/change <model>` to switch models.\n"
-            "Example: `/change gemma`"
-        )
-        bot.reply_to(message, options_message, parse_mode='Markdown')
-        return
-
     if len(command_parts) != 2:
-        bot.reply_to(message, "⚠️ Usage: `/change <model>`\nExample: `/change gemma`", parse_mode='Markdown')
+        bot.reply_to(message, "⚠️ Usage: `/redeem <code>`\nExample: `/redeem ABC1234`", parse_mode='Markdown')
         return
 
-    model_name = command_parts[1].lower()
-    model_map = {
-        'mixtral': 'mixtral-8x7b-32768',
-        'gemma': 'gemma2-9b-it',
-        'llama': 'llama3-70b-8192'
-    }
+    code = command_parts[1].strip().upper()
+    code_data = codes_collection.find_one({'code': code, 'is_redeemed': False})
 
-    if model_name not in model_map:
-        bot.reply_to(message, "⚠️ Invalid model name. Please choose from `mixtral`, `gemma`, or `llama`.", parse_mode='Markdown')
+    if not code_data:
+        bot.reply_to(message, "⚠️ Invalid or already redeemed code. Please try again.", parse_mode='Markdown')
         return
 
-    selected_model = model_map[model_name]
-    user_model[user_id] = selected_model
-    bot.reply_to(message, f'✅ Model changed to: {model_name.capitalize()}', parse_mode='Markdown')
+    # Mark the code as redeemed
+    codes_collection.update_one({'code': code}, {'$set': {'is_redeemed': True}})
+
+    # Update the user's data to mark them as premium
+    users_collection.update_one({'user_id': user_id}, {'$set': {'is_premium': True}})
+
+    bot.reply_to(message, "✅ Your premium membership has been activated!", parse_mode='Markdown')
 
 # Start the Flask app in a separate thread
 flask_thread = Thread(target=run_flask_app)
