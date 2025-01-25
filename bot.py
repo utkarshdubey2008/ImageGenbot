@@ -13,7 +13,7 @@ from pymongo import MongoClient
 API_TOKEN = '8107353617:AAEvH1iADJveysXU9QUobi6GQ9zz_rdJA4k'
 GROQ_API_KEY = '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'
 CHANNEL_ID = '@thealphabotz'
-ADMIN_ID = 123456789  # Replace with the actual admin user ID
+ADMIN_ID = 7758708579 # Replace with the actual admin user ID
 bot = telebot.TeleBot(API_TOKEN)
 
 # MongoDB Configuration
