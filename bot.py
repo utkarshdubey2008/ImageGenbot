@@ -13,7 +13,7 @@ from pymongo import MongoClient
 API_TOKEN = '8107353617:AAEvH1iADJveysXU9QUobi6GQ9zz_rdJA4k'
 GROQ_API_KEY = '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'
 CHANNEL_ID = '@thealphabotz'
-ADMIN_ID = 7758708579  # Replace with the actual admin user ID
+ADMIN_ID = 123456789  # Replace with the actual admin user ID
 bot = telebot.TeleBot(API_TOKEN)
 
 # MongoDB Configuration
@@ -147,6 +147,11 @@ def generate_image(message):
 # Text query handler
 @bot.message_handler(func=lambda message: True)
 def handle_query(message):
+    if message.text.startswith('/gen') or message.text.startswith('/generate_code') or \
+       message.text.startswith('/redeem') or message.text.startswith('/stats') or \
+       message.text.startswith('/broadcast'):
+        return
+
     if not is_subscribed(message.from_user.id):
         keyboard = telebot.types.InlineKeyboardMarkup()
         keyboard.add(telebot.types.InlineKeyboardButton('Join The Alpha Botz', url='https://t.me/thealphabotz'))
@@ -241,7 +246,7 @@ def broadcast_message(message):
             continue
 
 # Generate premium codes for admins
-@bot.message_handler(commands=['generate_codes'])
+@bot.message_handler(commands=['generate_code'])
 def generate_premium_codes(message):
     user_id = message.from_user.id
     if not is_admin(user_id):
