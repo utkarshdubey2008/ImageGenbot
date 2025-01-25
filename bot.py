@@ -63,9 +63,8 @@ def send_welcome(message):
         "- 10 text queries every hour.\n\n"
         "🔗 Make sure to join The Alpha Botz Channel to start using the bot."
     )
-    keyboard = telebot.types.InlineKeyboardMarkup()
-    keyboard.add(telebot.types.InlineKeyboardButton('Join The Alpha Botz Channel', url='https://t.me/thealphabotz'))
-    keyboard.add(telebot.types.InlineKeyboardButton('Change Model', callback_data='change_model'))
+    keyboard = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
+    keyboard.add(telebot.types.KeyboardButton('Change Model'))
     bot.send_message(message.chat.id, start_message, parse_mode='Markdown', reply_markup=keyboard)
 
 # Image generation command handler
@@ -77,8 +76,14 @@ def generate_image(message):
         bot.reply_to(message, "🚫 You must join The Alpha Botz to use this bot. ✅ Once you've joined, click 'Start' below.", parse_mode='Markdown', reply_markup=keyboard)
         return
 
-    # Rate limit check
     user_id = message.from_user.id
+    prompt = message.text[len('/gen '):].strip()
+
+    if not prompt:
+        bot.reply_to(message, "⚠️ Please provide a prompt for image generation. Example: `/gen a beautiful sunset`")
+        return
+
+    # Rate limit check
     current_time = time.time()
     if user_id in image_rate_limit and len(image_rate_limit[user_id]) >= 3:
         if current_time - image_rate_limit[user_id][0] < 10800: # 3 hours in seconds
@@ -90,7 +95,11 @@ def generate_image(message):
         image_rate_limit[user_id] = []
     image_rate_limit[user_id].append(current_time)
 
-    prompt = message.text[len('/gen '):]
+    # Send ⚡ emoji
+    flash_message = bot.send_message(message.chat.id, "⚡")
+    time.sleep(2)
+    bot.delete_message(message.chat.id, flash_message.message_id)
+
     data = {'query': prompt, 'agentMode': True}
     response = requests.post('https://www.blackbox.ai/api/image-generator', headers=headers, json=data)
 
@@ -162,30 +171,28 @@ def handle_query(message):
     bot.reply_to(message, response_text)
 
 # Model change command handler
-@bot.message_handler(commands=['change'])
+@bot.message_handler(func=lambda message: message.text == 'Change Model')
 def change_model(message):
-    keyboard = telebot.types.InlineKeyboardMarkup()
-    keyboard.add(telebot.types.InlineKeyboardButton('🌟 Mixtral', callback_data='mixtral-8x7b-32768'))
-    keyboard.add(telebot.types.InlineKeyboardButton('💎 Gemma', callback_data='gemma2-9b-it'))
-    keyboard.add(telebot.types.InlineKeyboardButton('🦙 Llama', callback_data='llama3-70b-8192'))
-    bot.send_message(message.chat.id, '🤖 Select your preferred model:', reply_markup=keyboard)
+    model_message = (
+        "🤖 *Select your preferred model:*\n"
+        "1. 🌟 Mixtral\n"
+        "2. 💎 Gemma\n"
+        "3. 🦙 Llama\n"
+        "Please reply with the model name (e.g., Mixtral)."
+    )
+    bot.send_message(message.chat.id, model_message, parse_mode='Markdown')
 
-# Callback query handler for model selection
-@bot.callback_query_handler(func=lambda call: True)
-def handle_callback_query(call):
-    user_id = call.from_user.id
-    user_model[user_id] = call.data
-    bot.answer_callback_query(call.id, f'Model changed to: {call.data}')
-    bot.send_message(call.message.chat.id, f'✅ Model changed to: {call.data}')
-
-# Inline keyboard button handler for changing model
-@bot.callback_query_handler(func=lambda call: call.data == 'change_model')
-def inline_change_model(call):
-    keyboard = telebot.types.InlineKeyboardMarkup()
-    keyboard.add(telebot.types.InlineKeyboardButton('🌟 Mixtral', callback_data='mixtral-8x7b-32768'))
-    keyboard.add(telebot.types.InlineKeyboardButton('💎 Gemma', callback_data='gemma2-9b-it'))
-    keyboard.add(telebot.types.InlineKeyboardButton('🦙 Llama', callback_data='llama3-70b-8192'))
-    bot.send_message(call.message.chat.id, '🤖 Select your preferred model:', reply_markup=keyboard)
+@bot.message_handler(func=lambda message: message.text in ['Mixtral', 'Gemma', 'Llama'])
+def set_model(message):
+    user_id = message.from_user.id
+    model_names = {
+        'Mixtral': 'mixtral-8x7b-32768',
+        'Gemma': 'gemma2-9b-it',
+        'Llama': 'llama3-70b-8192'
+    }
+    selected_model = model_names.get(message.text)
+    user_model[user_id] = selected_model
+    bot.reply_to(message, f'✅ Model changed to: {message.text}')
 
 # Start the Flask app in a separate thread
 flask_thread = Thread(target=run_flask_app)
