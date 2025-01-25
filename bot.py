@@ -45,15 +45,17 @@ def send_welcome(message):
         "⚠️ **Limits**:\n"
         "- 3 image generations every 3 hours.\n"
         "- 10 text queries every hour.\n\n"
-        "🔗 Make sure to join [The Alpha Botz Channel](https://t.me/thealphabotz) to start using the bot."
+        "🔗 Make sure to join The Alpha Botz Channel to start using the bot."
     )
-    bot.send_message(message.chat.id, start_message, parse_mode='Markdown')
+    keyboard = telebot.types.InlineKeyboardMarkup()
+    keyboard.add(telebot.types.InlineKeyboardButton('Join The Alpha Botz Channel', url='https://t.me/thealphabotz'))
+    bot.send_message(message.chat.id, start_message, parse_mode='Markdown', reply_markup=keyboard)
 
 # Image generation command handler
 @bot.message_handler(commands=['gen'])
 def generate_image(message):
     if not is_subscribed(message.from_user.id):
-        bot.reply_to(message, "🚫 You must join [The Alpha Botz](https://t.me/thealphabotz) to use this bot. ✅ Once you've joined, click 'Retry' below.", parse_mode='Markdown')
+        bot.reply_to(message, "🚫 You must join The Alpha Botz to use this bot. ✅ Once you've joined, click 'Retry' below.", parse_mode='Markdown')
         return
 
     # Rate limit check
@@ -84,7 +86,7 @@ def generate_image(message):
 @bot.message_handler(func=lambda message: True)
 def handle_query(message):
     if not is_subscribed(message.from_user.id):
-        bot.reply_to(message, "🚫 You must join [The Alpha Botz](https://t.me/thealphabotz) to use this bot. ✅ Once you've joined, click 'Retry' below.", parse_mode='Markdown')
+        bot.reply_to(message, "🚫 You must join The Alpha Botz to use this bot. ✅ Once you've joined, click 'Retry' below.", parse_mode='Markdown')
         return
 
     # Rate limit check
@@ -153,5 +155,6 @@ def handle_callback_query(call):
     user_id = call.from_user.id
     user_model[user_id] = call.data
     bot.answer_callback_query(call.id, f'Model changed to: {call.data}')
+    bot.send_message(call.message.chat.id, f'✅ Model changed to: {call.data}')
 
 bot.polling()
