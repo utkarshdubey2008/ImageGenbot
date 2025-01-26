@@ -107,7 +107,7 @@ def generate_image(message):
     # Retrieve user data
     user_data = users_collection.find_one({'user_id': user_id})
     if not user_data:
-        user_data = {'user_id': user_id, 'is_premium': False, 'image_gen_count': 0, 'text_query_count': 0}
+        user_data = {'user_id': user_id, 'is_premium': False, 'image_gen_count': 0, 'text_query_count': 0, 'last_reset': time.time()}
         users_collection.insert_one(user_data)
 
     # Check rate limits based on user type
@@ -115,6 +115,12 @@ def generate_image(message):
     is_premium = user_data['is_premium']
     max_images_per_hour = 5 if is_premium else 3
     max_images_per_day = 25 if is_premium else 10
+
+    # Reset the counts if it's been more than an hour
+    if current_time - user_data['last_reset'] > 3600:
+        users_collection.update_one({'user_id': user_id}, {'$set': {'image_gen_count': 0, 'text_query_count': 0, 'last_reset': current_time}})
+        user_data['image_gen_count'] = 0
+        user_data['text_query_count'] = 0
 
     # Check hourly image generation limit
     if user_data['image_gen_count'] >= max_images_per_hour:
@@ -164,13 +170,19 @@ def handle_query(message):
     # Retrieve user data
     user_data = users_collection.find_one({'user_id': user_id})
     if not user_data:
-        user_data = {'user_id': user_id, 'is_premium': False, 'image_gen_count': 0, 'text_query_count': 0}
+        user_data = {'user_id': user_id, 'is_premium': False, 'image_gen_count': 0, 'text_query_count': 0, 'last_reset': time.time()}
         users_collection.insert_one(user_data)
 
     # Check rate limits based on user type
     current_time = time.time()
     is_premium = user_data['is_premium']
     max_queries_per_hour = 25 if is_premium else 10
+
+    # Reset the counts if it's been more than an hour
+    if current_time - user_data['last_reset'] > 3600:
+        users_collection.update_one({'user_id': user_id}, {'$set': {'image_gen_count': 0, 'text_query_count': 0, 'last_reset': current_time}})
+        user_data['image_gen_count'] = 0
+        user_data['text_query_count'] = 0
 
     # Check hourly text query limit
     if user_data['text_query_count'] >= max_queries_per_hour:
