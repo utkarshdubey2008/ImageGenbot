@@ -10,23 +10,18 @@ import pymongo
 from pymongo import MongoClient
 
 # Bot Configuration
-API_TOKEN = '8107353617:AAEvH1iADJveysXU9QUobi6GQ9zz_rdJA4k'
-GROQ_API_KEY = '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'
+API_TOKEN = 'your_api_token_here'
+GROQ_API_KEY = 'your_groq_api_key_here'
 CHANNEL_ID = '@thealphabotz'
-ADMIN_ID = 7758708579 # Replace with the actual admin user ID
+ADMIN_ID = 7758708579  # Replace with the actual admin user ID
 bot = telebot.TeleBot(API_TOKEN)
 
 # MongoDB Configuration
-MONGO_URI = 'mongodb+srv://ank41785:TjezIhHRkw3vJDBk@cluster0.nldfp.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0'
+MONGO_URI = 'your_mongo_uri_here'
 client = MongoClient(MONGO_URI)
 db = client['bot_database']
 users_collection = db['users']
 codes_collection = db['codes']
-
-# Rate limiting data structures
-image_rate_limit = {}
-query_rate_limit = {}
-user_model = {}
 
 # Groq client setup
 client = Groq(api_key=GROQ_API_KEY)
@@ -107,7 +102,7 @@ def generate_image(message):
     # Retrieve user data
     user_data = users_collection.find_one({'user_id': user_id})
     if not user_data:
-        user_data = {'user_id': user_id, 'is_premium': False, 'image_gen_count': 0, 'text_query_count': 0, 'last_reset': time.time()}
+        user_data = {'user_id': user_id, 'is_premium': user_id == ADMIN_ID, 'image_gen_count': 0, 'text_query_count': 0, 'last_reset': time.time()}
         users_collection.insert_one(user_data)
 
     # Check rate limits based on user type
@@ -170,7 +165,7 @@ def handle_query(message):
     # Retrieve user data
     user_data = users_collection.find_one({'user_id': user_id})
     if not user_data:
-        user_data = {'user_id': user_id, 'is_premium': False, 'image_gen_count': 0, 'text_query_count': 0, 'last_reset': time.time()}
+        user_data = {'user_id': user_id, 'is_premium': user_id == ADMIN_ID, 'image_gen_count': 0, 'text_query_count': 0, 'last_reset': time.time()}
         users_collection.insert_one(user_data)
 
     # Check rate limits based on user type
